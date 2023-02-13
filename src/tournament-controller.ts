@@ -1,64 +1,39 @@
 import { BigInt } from "@graphprotocol/graph-ts"
 import {
-  TournamentController,
-  OwnershipTransferred,
-  Registered,
-  TeamCreated,
-  TournamentCreated
+  TeamCreated
 } from "../generated/TournamentController/TournamentController"
-import { ExampleEntity } from "../generated/schema"
 
-export function handleOwnershipTransferred(event: OwnershipTransferred): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
+import {Player,Team,playerTeam} from "../generated/schema";
+import { sendEPNSNotification } from "./EPNSNotification";
+export const subgraphID="kalyan-singh/gtourneyv2";
 
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (!entity) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
-
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+export function handleTeamCreated(e: TeamCreated): void{
+  let teamId=e.params.teamId.toHexString();
+  let members=e.params.members;
+  let nTeam= new Team(e.params.teamId.toString());
+  nTeam.teamID=e.params.teamId;
+  for(let i=0;i<members.length;i++){
+    let p1= Player.load(members[i].toHexString());
+    if(!p1){
+      p1= new Player(e.params.members[i].toHexString());
+      p1.save();
+    }
+    let ptid=members[i].toHexString().concat(teamId);
+    let pt = new playerTeam(ptid);
+    pt.team=nTeam.id;
+    pt.player=p1.id;
+    pt.save();
+    let recipient = members[i].toHexString(),
+	  type = "3",
+	  title = "Added",
+	  body = `You are added to team ${e.params.teamId} by leader ${e.params.leader.toHexString()}`,
+	  subject = "Addition to Team",
+	  message = `You are added to team ${e.params.teamId}`,
+	  image = "null",
+	  secret = "null",
+	  cta = "http://127.0.0.1:5173/"
+    let notification = `{\"type\": \"${type}\", \"title\": \"${title}\", \"body\": \"${body}\", \"subject\": \"${subject}\", \"message\": \"${message}\", \"image\": \"${image}\", \"secret\": \"${secret}\", \"cta\": \"${cta}\"}`
+    sendEPNSNotification (recipient, notification);
   }
-
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
-
-  // Entity fields can be set based on event parameters
-  entity.previousOwner = event.params.previousOwner
-  entity.newOwner = event.params.newOwner
-
-  // Entities can be written to the store with `.save()`
-  entity.save()
-
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
-
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.distributions(...)
-  // - contract.escrow(...)
-  // - contract.matchMakerAddress(...)
-  // - contract.owner(...)
-  // - contract.participants(...)
-  // - contract.teams(...)
-  // - contract.tournaments(...)
-  // - contract.winners(...)
+  nTeam.save();
 }
-
-export function handleRegistered(event: Registered): void {}
-
-export function handleTeamCreated(event: TeamCreated): void {}
-
-export function handleTournamentCreated(event: TournamentCreated): void {}
